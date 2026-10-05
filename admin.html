@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MH Task BD - অ্যাডমিন প্যানেল</title>
+  <style>
+    :root {
+      --bg: #121212;
+      --card-bg: #1e1e1e;
+      --accent: #00e676;
+      --danger: #ff5252;
+      --text: #ffffff;
+      --subtext: #aaaaaa;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 15px;
+    }
+    .container { max-width: 600px; margin: 0 auto; }
+    
+    .card {
+      background: var(--card-bg);
+      padding: 20px;
+      border-radius: 12px;
+      border: 1px solid #333;
+      margin-bottom: 20px;
+    }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 8px;
+      margin-bottom: 12px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #2a2a2a;
+      color: #fff;
+      box-sizing: border-box;
+    }
+    button {
+      background: var(--accent);
+      color: #000;
+      font-weight: bold;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-approve { background: var(--accent); color: #000; padding: 6px 12px; width: auto; margin: 0; }
+    .btn-reject { background: var(--danger); color: #fff; padding: 6px 12px; width: auto; margin: 0; }
+    
+    .item-row {
+      border: 1px solid #333;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      background: #252525;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #adminDashboard { display: none; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- অ্যাডমিন লগইন -->
+    <div id="loginCard" class="card">
+      <h2 style="color:var(--accent); margin-top:0;">অ্যাডমিন লগইন</h2>
+      <label>সিক্রেট পাসওয়ার্ড:</label>
+      <input type="password" id="adminPass" placeholder="পাসওয়ার্ড দিন (123456)">
+      <button onclick="adminLogin()">প্রবেশ করুন</button>
+    </div>
+
+    <!-- অ্যাডমিন ড্যাশবোর্ড -->
+    <div id="adminDashboard">
+      
+      <!-- নোটিশ আপডেট করার সেকশন -->
+      <div class="card">
+        <h3 style="margin-top:0; color:var(--accent);">ইউজার নোটিশ পরিবর্তন করুন</h3>
+        <input type="text" id="noticeInput" placeholder="নতুন নোটিশ লিখুন...">
+        <button onclick="updateNotice()">নোটিশ পাবলিশ করুন</button>
+      </div>
+
+      <!-- ডিপোজিট রিকোয়েস্ট তালিকা -->
+      <div class="card">
+        <h3 style="margin-top:0;">পেন্ডিং ডিপোজিটসমূহ</h3>
+        <div id="depositList">লোডিং...</div>
+      </div>
+
+      <!-- উইথড্র রিকোয়েস্ট তালিকা -->
+      <div class="card">
+        <h3 style="margin-top:0;">পেন্ডিং উইথড্রসমূহ</h3>
+        <div id="withdrawList">লোডিং...</div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ফায়ারবেস স্ক্রিপ্ট -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, onSnapshot, doc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // ⚠️ আপনার ফায়ারবেস কনফিগারেশন বসান
+    const firebaseConfig = {
+      apiKey: "AIzaSyDPsO4k8klsTfyDEW5T5jr96uzcvmQLHu8",
+      authDomain: "mh-task-bd.firebaseapp.com",
+      projectId: "mh-task-bd",
+      storageBucket: "mh-task-bd.firebasestorage.app",
+      messagingSenderId: "999695777023",
+      appId: "1:999695777023:web:26e593a8fcb207eca260ca"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // অ্যাডমিন পাসওয়ার্ড লগইন
+    window.adminLogin = function() {
+      const pass = document.getElementById("adminPass").value;
+      if(pass === "moshiur10") { // আপনার গোপন পাসওয়ার্ড
+        document.getElementById("loginCard").style.display = "none";
+        document.getElementById("adminDashboard").style.display = "block";
+        loadRequests();
+      } else {
+        alert("ভুল পাসওয়ার্ড!");
+      }
+    };
+
+    // ডেটা লোড করা
+    function loadRequests() {
+      // ডিপোজিট মনিটর
+      onSnapshot(collection(db, "deposits"), (snapshot) => {
+        const list = document.getElementById("depositList");
+        list.innerHTML = "";
+        let count = 0;
+
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          if(data.status === "pending") {
+            count++;
+            list.innerHTML += `
+              <div class="item-row">
+                <div>
+                  <strong>ফোন: ${data.phone}</strong><br>
+                  <small style="color:var(--subtext);">${data.method.toUpperCase()} | ৳${data.amount}</small><br>
+                  <small style="color:var(--accent);">TrxID: ${data.trxId}</small>
+                </div>
+                <div>
+                  <button class="btn-approve" onclick="actionDeposit('${docSnap.id}', '${data.userId}', ${data.amount}, 'approved')">Approve</button>
+                  <button class="btn-reject" onclick="actionDeposit('${docSnap.id}', '${data.userId}', 0, 'rejected')">Reject</button>
+                </div>
+              </div>
+            `;
+          }
+        });
+
+        if(count === 0) list.innerHTML = "<p style='color:var(--subtext); font-size:13px;'>কোনো পেন্ডিং ডিপোজিট নেই।</p>";
+      });
+
+      // উইথড্র মনিটর
+      onSnapshot(collection(db, "withdrawals"), (snapshot) => {
+        const list = document.getElementById("withdrawList");
+        list.innerHTML = "";
+        let count = 0;
+
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          if(data.status === "pending") {
+            count++;
+            list.innerHTML += `
+              <div class="item-row">
+                <div>
+                  <strong>ফোন: ${data.phone}</strong><br>
+                  <small style="color:var(--subtext);">পরিমাণ: ৳${data.amount}</small>
+                </div>
+                <div>
+                  <button class="btn-approve" onclick="actionWithdraw('${docSnap.id}', '${data.userId}', ${data.amount}, 'approved')">Complete</button>
+                  <button class="btn-reject" onclick="actionWithdraw('${docSnap.id}', '${data.userId}', 0, 'rejected')">Reject</button>
+                </div>
+              </div>
+            `;
+          }
+        });
+
+        if(count === 0) list.innerHTML = "<p style='color:var(--subtext); font-size:13px;'>কোনো পেন্ডিং উইথড্র নেই।</p>";
+      });
+    }
+
+    // ডিপোজিট অ্যাকশন (Approve করলে ইউজারের ব্যালেন্স অটো যোগ হবে)
+    window.actionDeposit = async function(depId, userId, amount, status) {
+      try {
+        await updateDoc(doc(db, "deposits", depId), { status: status });
+
+        if(status === 'approved') {
+          await updateDoc(doc(db, "users", userId), {
+            balance: increment(amount)
+          });
+          alert("ডিপোজিট অ্যাপ্রুভ হয়েছে এবং ইউজারের ওয়ালেটে টাকা যোগ হয়েছে!");
+        } else {
+          alert("ডিপোজিট বাতিল করা হয়েছে।");
+        }
+      } catch(e) {
+        alert("ত্রুটি: " + e.message);
+      }
+    };
+
+    // উইথড্র অ্যাকশন (Approve করলে মেইন ওয়ালেট থেকে টাকা কাটা যাবে)
+    window.actionWithdraw = async function(withDocId, userId, amount, status) {
+      try {
+        await updateDoc(doc(db, "withdrawals", withDocId), { status: status });
+
+        if(status === 'approved') {
+          await updateDoc(doc(db, "users", userId), {
+            balance: increment(-amount)
+          });
+          alert("উইথড্র সম্পন্ন হয়েছে এবং ইউজারের ওয়ালেট থেকে টাকা কাটা হয়েছে!");
+        } else {
+          alert("উইথড্র বাতিল করা হয়েছে।");
+        }
+      } catch(e) {
+        alert("ত্রুটি: " + e.message);
+      }
+    };
+
+    // নোটিশ আপডেট
+    window.updateNotice = async function() {
+      const notice = document.getElementById("noticeInput").value;
+      if(!notice) return alert("নোটিশ লিখুন!");
+
+      try {
+        await updateDoc(doc(db, "settings", "general"), { notice: notice });
+        alert("নোটিশ সফলভাবে আপডেট হয়েছে!");
+        document.getElementById("noticeInput").value = "";
+      } catch(e) {
+        alert("ত্রুটি: " + e.message);
+      }
+    };
+  </script>
+</body>
+</html>
